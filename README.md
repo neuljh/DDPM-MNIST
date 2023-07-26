@@ -1,5 +1,5 @@
 # DDPM-MNIST
-Diffusion Model（DDPM）来生成MNIST数字
+# Diffusion Model（DDPM）来生成MNIST数字 ， 如果有帮助希望你可以一键三连！！！
 
 (1)初步完成
 使用Diffusion Model(DDPM)模型来生成MNIST图片。这里生成的图片是数字0-9。
