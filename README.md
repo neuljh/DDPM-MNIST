@@ -5,7 +5,7 @@
 使用Diffusion Model(DDPM)模型来生成MNIST图片。这里生成的图片是数字0-9。
 
 ①　导入对应类库
-
+```python
 from tqdm import tqdm
 import torch
 import torch.nn as nn
@@ -17,9 +17,10 @@ from torchvision.utils import save_image, make_grid
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter
 import numpy as np
-
+```
 ②　定义关键的模型或类
 
+```python
 class ResidualConvBlock(nn.Module):
     def __init__(
         self, in_channels: int, out_channels: int, is_res: bool = False
@@ -55,17 +56,21 @@ class ResidualConvBlock(nn.Module):
             x1 = self.conv1(x)
             x2 = self.conv2(x1)
             return x2
+```
 
 此代码定义了一个残差卷积块，它是深度卷积神经网络的 ResNet 架构中使用的标准构建块。 ResidualConvBlock 是作为 nn.Module 的子类实现的，这是一个用于定义神经网络模块的 PyTorch 类。
 ResidualConvBlock 具有三个输入参数：in_channels、out_channels 和 is_res。 in_channels 和 out_channels 是整数，分别表示卷积层的输入和输出通道数。 is_res 是一个布尔变量，表示该块是否为残差块。
 init() 方法初始化块的参数，包括 self.same_channels 和 self.is_res，它们是实例变量，分别存储 in_channels==out_channels 和 is_res 参数的值。 然后，使用 nn.Sequential 类定义了两个卷积层，每个卷积层都包含一个二维卷积层 (nn.Conv2d)、一个批量归一化层 (nn.BatchNorm2d) 和一个 GELU 激活函数 (nn.GELU)。
 GELU (Gaussian Error Linear Units) 是一种激活函数，其数学表达式为：
 
+![image](https://github.com/neuljh/DDPM-MNIST/assets/132900799/78c8eb1e-afea-4450-83fa-356ccb66433b)
+
 其中是标准正态分布的累积分布函数，erf 表示误差函数。GELU 激活函数被提出作为 ReLU (Rectified Linear Unit) 的一种改进，旨在通过克服 ReLU 的一些缺点来提高神经网络的性能。
 与 ReLU 相比，GELU 在许多情况下表现更好。特别地，在自然语言处理和计算机视觉领域中，使用 GELU 激活函数的模型在一些基准测试中表现优于使用 ReLU 的模型。然而，GELU 的计算成本比 ReLU 更高，因为它涉及到计算误差函数和标准正态分布的累积分布函数，这可能会对训练速度和内存消耗产生一些影响。
 forward() 方法执行 ResidualConvBlock 的正向传递。 如果 is_res 为 True，它首先将两个卷积层应用于输入张量 x，然后将输入张量 x 添加到输出张量。 这样做是为了在输入和输出张量之间创建一个“剩余”连接，允许梯度在反向传播期间直接流过块。 如果输入输出通道数不同（即self.same_channels为False），则输入张量x先经过第一个卷积层，第一个卷积层的输出与输出之间做残差连接 第二个卷积层。 最后，输出张量除以 2 的平方根（即 1.414）以考虑残差连接的缩放效应。
 如果 is_res 为 False，则 forward() 方法只是将两个卷积层应用于输入张量 x 并返回输出张量。 这是针对 ResNet 架构中的非残差块完成的。
 
+```python
 class UnetDown(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(UnetDown, self).__init__()
@@ -77,6 +82,7 @@ class UnetDown(nn.Module):
 
     def forward(self, x):
         return self.model(x)
+```
 
 此代码为 U-Net 架构定义了一个缩小块，这是一种用于图像分割任务的常用网络。 UnetDown 块作为 nn.Module 的子类实现，后者是用于定义神经网络模块的 PyTorch 类。
 UnetDown 块有两个输入参数：in_channels 和 out_channels，它们是整数，分别表示块中卷积层的输入和输出通道数。
@@ -84,6 +90,7 @@ init() 方法初始化块的参数并定义块的层。 特别是，它创建了
 ResidualConvBlock 是在代码其他地方定义的自定义模块，它由两个具有批量归一化和 GELU 激活的 2D 卷积层以及输入和输出张量之间的残差连接组成（如果 is_res 参数为 True）。 通过在 UnetDown 块中使用此 ResidualConvBlock，该块能够学习输入图像的更稳健和更具表现力的特征表示。
 forward() 方法执行 UnetDown 块的正向传递。 它只是将 nn.Sequential 模块应用于输入张量并返回输出张量，由于 MaxPool2d 层，输出张量的空间维度是输入张量的一半。 这种下采样操作在 U-Net 架构中很重要，因为它允许网络捕获输入图像的高级和低级特征以用于分割任务。
 
+```python
 class UnetUp(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(UnetUp, self).__init__()
@@ -101,12 +108,14 @@ class UnetUp(nn.Module):
         x = torch.cat((x, skip), 1)
         x = self.model(x)
         return x
+```
 
 此代码为 U-Net 架构定义了一个放大块，U-Net 架构是一种用于图像分割任务的常用网络。 UnetUp 块作为 nn.Module 的子类实现，后者是用于定义神经网络模块的 PyTorch 类。
 UnetUp 块有两个输入参数：in_channels 和 out_channels，它们是整数，分别表示块中卷积层的输入和输出通道数。
 init() 方法初始化块的参数并定义块的层。 特别是，它创建了一个层列表，其中包含一个 ConvTranspose2d 层（执行 2 倍的上采样），然后是两个 ResidualConvBlock 层。 ConvTranspose2d 层通过在相邻像素之间插入零然后将结果与可学习内核进行卷积来使输入张量的空间维度加倍。 ResidualConvBlock 层是在代码中其他地方定义的自定义模块，它们由两个具有批量归一化和 GELU 激活的 2D 卷积层组成，以及输入和输出张量之间的残差连接（如果 is_res 参数为 True）。 通过在 UnetUp 块中使用这些 ResidualConvBlock 层，该块能够学习输入图像的更稳健和更具表现力的特征表示。
 forward() 方法执行 UnetUp 块的前向传递。 它需要两个输入张量：x，要上采样的张量，和 skip，要与 x 连接的张量。 该方法首先连接 x 并沿通道维度跳过，然后将 init() 方法中定义的 nn.Sequential 模块应用于连接后的张量。 最后，它返回输出张量，由于 ConvTranspose2d 层，它的空间维度是输入张量的两倍。
 
+```python
 class EmbedFC(nn.Module):
     def __init__(self, input_dim, emb_dim):
         super(EmbedFC, self).__init__()
@@ -124,12 +133,14 @@ class EmbedFC(nn.Module):
     def forward(self, x):
         x = x.view(-1, self.input_dim)
         return self.model(x)
+```
 
 此代码定义了一个名为 EmbedFC 的神经网络模块，它使用单个完全连接层 (FC) 执行输入数据的嵌入。 EmbedFC 模块作为 nn.Module 的子类实现，后者是用于定义神经网络模块的 PyTorch 类。
 EmbedFC 模块有两个输入参数：input_dim 和 emb_dim，它们分别是表示输入维度和嵌入空间维度的整数。
 init() 方法初始化 EmbedFC 模块的参数并定义模块的层。 特别是，它创建了一个层列表，其中包含一个 FC 层，后跟一个 GELU 激活函数，以及另一个输出最终嵌入的 FC 层。 FC 层采用形状为 (batch_size, input_dim) 的输入张量并对它应用线性变换，然后是 GELU 激活函数。 GELU 激活函数是整流线性单元 (ReLU) 函数的一个变体，已被证明可以提高某些任务的性能。 第二个 FC 层将第一个 FC 层的输出映射到具有维度 emb_dim 的嵌入空间。
 forward() 方法执行 EmbedFC 模块的前向传递。 它采用输入张量 x 并首先将其重塑为形状为 (-1, input_dim) 的二维张量，其中 -1 表示推断的批量大小。 然后，重塑后的张量通过 init() 方法中定义的 nn.Sequential 模块传递，该模块按顺序应用两个 FC 层和 GELU 激活函数。 最后，返回具有形状 (batch_size, emb_dim) 的输出张量。
 
+```python
 class ContextUnet(nn.Module):
     def __init__(self, in_channels, n_feat = 256, n_classes=10):
         super(ContextUnet, self).__init__()
@@ -186,6 +197,7 @@ class ContextUnet(nn.Module):
         up3 = self.up2(cemb2*up2+ temb2, down1)
         out = self.out(torch.cat((up3, x), 1))
         return out
+```
 
 此代码定义了一个名为 ContextUnet 的 PyTorch 模块，它是用于图像分割任务的 U-Net 架构的修改版本。 修改后的架构将额外的上下文和时间信息合并到模型中。
 __init__ 函数定义了模型的架构。 输入参数是 in_channels（图像的输入通道数）、n_feat（隐藏层中的特征/通道数）和 n_classes（分割任务中的类数）。
@@ -202,6 +214,7 @@ forward() 方法定义了神经网络模型的前向传递，该模型将图像�
 然后使用四个不同的嵌入层将单热张量 c 和时间步长 t 嵌入到四个独立的特征图中：contextembed1、timeembed1、contextembed2 和 timeembed2。 生成的特征图被重塑为大小为 (batch_size, n_feat*2, 1, 1) 或 (batch_size, n_feat, 1, 1)，其中 n_feat 是表示隐藏向量中特征数量的超参数。
 最后，上采样层使用了两次。首先，up1是通过将hiddenvec传递给self.up0来计算的。接下来，up2和up3都使用了上一层的输出作为它们的输入，同时也使用了上下文和时间嵌入。
 
+```python
 def ddpm_schedules(beta1, beta2, T):
     """
     Returns pre-computed schedules for DDPM sampling, training process.
@@ -225,6 +238,8 @@ def ddpm_schedules(beta1, beta2, T):
         "sqrtmab": sqrtmab,  # \sqrt{1-\bar{\alpha_t}}
         "mab_over_sqrtmab": mab_over_sqrtmab_inv,  # (1-\alpha_t)/\sqrt{1-\bar{\alpha_t}}
     }
+```
+
 这段代码返回预先计算好的用于 DDPM（Diffusion Probabilistic Models）采样和训练过程中需要用到的各种变量和系数。
 beta1 和 beta2 是两个参数，要求满足 beta1 < beta2 < 1.0，否则会抛出 AssertionError 异常。这两个参数在 DDPM 的采样和训练过程中起到很重要的作用，它们决定了每个时间步的噪声水平，随着时间步的增加，噪声水平逐渐变大。其中，beta1 表示起始噪声水平，beta2 表示结束噪声水平。
 T 表示总的时间步数。
@@ -239,6 +254,7 @@ beta1 和 beta2 是两个参数，要求满足 beta1 < beta2 < 1.0，否则会�
 mab_over_sqrtmab 表示 (1 - alpha_t) / sqrtmab，也就是 sqrtmab 的倒数乘以 1 - alpha_t。
 这些变量和系数在 DDPM 的采样和训练过程中用到，比如在采样过程中，需要根据这些变量和系数计算出每个时间步的噪声水平和衰减系数，以及计算出噪声的标准差；在训练过程中，需要使用这些变量和系数计算出损失函数。
 
+```python
 class DDPM(nn.Module):
     def __init__(self, nn_model, betas, n_T, device, drop_prob=0.1):
         super(DDPM, self).__init__()
@@ -309,6 +325,7 @@ class DDPM(nn.Module):
         
         x_i_store = np.array(x_i_store)
         return x_i, x_i_store
+```
 
 此代码定义了一个名为 DDPM（代表扩散概率模型）的 PyTorch 模块，用于从扩散模型进行训练和采样。 类构造函数使用 nn_model 参数初始化模型，这是一个用于扩散模型的神经网络模型。 betas 参数是一个元组，包含两个确定模型学习率的浮点数。 n_T 参数是一个整数，它确定在训练或采样过程中采用的扩散步骤数。 设备参数指定运行模型的设备（例如 CPU 或 GPU）。 drop_prob 参数指定在训练期间应用 dropout 的概率。 loss_mse 属性是均方误差损失函数的一个实例。
 Forward()方法用于训练模型。 它接受两个张量 x 和 c。 x 表示输入数据，c 是上下文向量。 该方法为批次中的每个样本生成一个介于 1 和 n_T 之间的随机整数 _ts。 然后它生成一个与 x 形状相同的随机张量噪声。 使用 _ts 和噪声，该方法生成一个张量 x_t，它表示步骤 _ts 的扩散过程的状态。 然后使用神经网络模型从 x_t 和 c 预测“误差项”，并返回预测误差与原始噪声张量之间的均方误差损失。
@@ -316,6 +333,7 @@ Sample()方法用于从扩散模型中采样。 它接受 n_sample，一个表�
 
 ③　定义训练过程
 定义一些超参数：
+```python
 n_epoch = 20
 batch_size = 256
 n_T = 400 # 500
@@ -326,6 +344,7 @@ lrate = 1e-4
 save_model = False
 save_dir = './data/diffusion_outputs10/'
 ws_test = [0.0, 0.5, 2.0] # strength of generative guidance
+```
 此代码初始化几个超参数，这些超参数将在稍后的训练和测试过程中使用：
 n_epoch 是用于训练模型的纪元数（即，完全通过训练数据）。
 batch_size 是将在训练期间一次处理的数据点（即本例中的图像）的数量。 较大的批量通常会导致更快的训练，但也需要更多的内存。
@@ -338,15 +357,17 @@ ws_test = [0.0, 0.5, 2.0] # strength of generative guidance
 save_dir 是将训练模型保存到的目录（如果 save_model 为 True）。
 ws_test 是三个值的列表，代表测试期间生成指导的强度。 值 0.0 对应于无指导，0.5 对应于适度指导，2.0 对应于强指导。 这样做的目的是查看模型在生成具有不同指导级别的样本时的表现如何。
 
+```python
 ddpm = DDPM(nn_model=ContextUnet(in_channels=1, n_feat=n_feat, n_classes=n_classes), betas=(1e-4, 0.02), n_T=n_T, device=device, drop_prob=0.1)
 ddpm.to(device)
 tf = transforms.Compose([transforms.ToTensor()]) # mnist is already normalised 0 to 
 dataset = MNIST("./data", train=True, download=True, transform=tf)
 dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=5)
 optim = torch.optim.Adam(ddpm.parameters(), lr=lrate)
+```
 
 该代码为 MNIST 数据集初始化并建立了称为 DDPM（去噪扩散概率模型）的深度生成模型。
-ddpm = DDPM(nn_model=ContextUnet(in_channels=1, n_feat=n_feat, n_classes=n_classes), betas=(1e-4, 0.02), n_T=n_T, device=device, drop_prob=0.1) 初始化DDPM模型。 它采用以下参数：
+ddpm = DDPM(nn_model=ContextUnet(in_channels=1, n_feat=n_feat, n_classes=n_classes), betas=(1e-4, 0.02), n_T=n_T, device=device, drop_prob=0.1)初始化DDPM模型。 它采用以下参数：
 nn_model：扩散模型使用的神经网络模型。 在这种情况下，ContextUnet 与 1 个输入通道、n_feat 隐藏特征和 n_classes 输出类一起使用。
 betas：Adam 优化器中使用的 beta。
 n_T：运行模型的扩散步数或时间步数。
@@ -361,7 +382,7 @@ dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_worker
 num_workers：用于数据加载的子进程数。
 optim = torch.optim.Adam(ddpm.parameters(), lr=lrate) 创建一个 Adam 优化器以在训练期间更新 DDPM 模型的参数。 ddpm.parameters() 指定要优化的参数，lr 指定优化器的学习率。
 
-
+```python
 for ep in range(n_epoch):
     print(f'epoch {ep}')
     ddpm.train()
@@ -426,6 +447,7 @@ for ep in range(n_epoch):
     if save_model and ep == int(n_epoch-1):
         torch.save(ddpm.state_dict(), save_dir + f"model_{ep}.pth")
         print('saved model at ' + save_dir + f"model_{ep}.pth")
+```
 
 训练循环开始，迭代指定的时期数。 DDPM 设置为训练模式，学习率随每个 epoch 线性衰减。 tqdm() 方法用于在训练期间显示进度条。
 loss_ema 变量用于计算损失的指数移动平均值以用于显示目的。 输入图像和标签被加载到设备。 通过使用输入图像和标签调用 DDPM 实例来计算损失，并执行反向传播。 loss_ema 值已更新，进度条已更新为新值。
@@ -436,88 +458,115 @@ loss_ema 变量用于计算损失的指数移动平均值以用于显示目的�
 在前文定义了变量ws_test ，它是三个值的列表，代表测试期间生成指导的强度。 值 0.0 对应于无指导，0.5 对应于适度指导，2.0 对应于强指导。 这样做的目的是查看模型在生成具有不同指导级别的样本时的表现如何。因此对于每个epoch，存在无指导、适度指导和强指导的训练情况。
 
 A.实验结果(epochs=20,learning_rate=0.0001,batch_size=256)：
+
 下面将展示epochs从0到19的动态变化图：
+
 1)实验结果(epochs=0,ws_test=0.0,0.5,2.0)：
+
 ![image](https://github.com/neuljh/DDPM-MNIST/assets/132900799/78b0f0db-dc6a-4c41-b366-ca9b2b3f9320)
 
 2)实验结果(epochs=1;ws_test=0.0,0.5,2.0)：
+
 ![image](https://github.com/neuljh/DDPM-MNIST/assets/132900799/8ed32f80-5e5b-461f-a92d-7b2ee0980a75)
 
 3)实验结果(epochs=2;ws_test=0.0,0.5,2.0)：
+
 ![image](https://github.com/neuljh/DDPM-MNIST/assets/132900799/c5f1588e-a8a8-4711-b0a7-534e8c2644bf)
 
 4)实验结果(epochs=3;ws_test=0.0,0.5,2.0)：
+
 ![image](https://github.com/neuljh/DDPM-MNIST/assets/132900799/a2e0a23f-1b8c-4675-8861-947d45e7e067)
 
 5)实验结果(epochs=4;ws_test=0.0,0.5,2.0)：
+
 ![image](https://github.com/neuljh/DDPM-MNIST/assets/132900799/e9b2ecfe-59c0-4a40-bd8f-bd161bae2330)
 
 6)实验结果(epochs=5;ws_test=0.0,0.5,2.0)：
+
 ![image](https://github.com/neuljh/DDPM-MNIST/assets/132900799/b05d418b-8f63-44a0-a7cf-54137a2a18e6)
 
 7)实验结果(epochs=6;ws_test=0.0,0.5,2.0)：
+
 ![image](https://github.com/neuljh/DDPM-MNIST/assets/132900799/4496446c-0c04-416a-9493-230f810d68b9)
 
 8)实验结果(epochs=7;ws_test=0.0,0.5,2.0)：
+
 ![image](https://github.com/neuljh/DDPM-MNIST/assets/132900799/9b2e15ee-6c7a-4c9a-881a-17b5e6749f50)
 
 9)实验结果(epochs=8;ws_test=0.0,0.5,2.0)：
+
 ![image](https://github.com/neuljh/DDPM-MNIST/assets/132900799/f75168f6-8fd4-4150-9ff8-c16e897f85f1)
 
 10)实验结果(epochs=9;ws_test=0.0,0.5,2.0)：
+
 ![image](https://github.com/neuljh/DDPM-MNIST/assets/132900799/b5e32adc-f1fa-4bae-9d51-aacb3aebcb5b)
 
 11)实验结果(epochs=10;ws_test=0.0,0.5,2.0)：
+
 ![image](https://github.com/neuljh/DDPM-MNIST/assets/132900799/2e686bda-0d06-4439-b2f9-50779ad0e1bd)
 
 12)实验结果(epochs=11;ws_test=0.0,0.5,2.0)：
+
 ![image](https://github.com/neuljh/DDPM-MNIST/assets/132900799/c472d32d-06b1-471c-9427-4c49cedf6acf)
 
 13)实验结果(epochs=12;ws_test=0.0,0.5,2.0)：
+
 ![image](https://github.com/neuljh/DDPM-MNIST/assets/132900799/05087d3a-d099-4b34-bf71-db365e63905c)
 
 14)实验结果(epochs=13;ws_test=0.0,0.5,2.0)：
+
 ![image](https://github.com/neuljh/DDPM-MNIST/assets/132900799/5fb14eef-1ffa-4cf1-9335-871e2d5a305e)
 
 15)实验结果(epochs=14;ws_test=0.0,0.5,2.0)：
+
 ![image](https://github.com/neuljh/DDPM-MNIST/assets/132900799/a58328ae-8520-4c90-bda8-0a15281f3529)
 
 16)实验结果(epochs=15;ws_test=0.0,0.5,2.0)：
+
 ![image](https://github.com/neuljh/DDPM-MNIST/assets/132900799/7a0bf6ff-0872-47ae-afc5-7853903a4b45)
 
 17)实验结果(epochs=16;ws_test=0.0,0.5,2.0)：
+
 ![image](https://github.com/neuljh/DDPM-MNIST/assets/132900799/649c8d45-bc70-40f1-b1f4-a16af87e8068)
 
 18)实验结果(epochs=17;ws_test=0.0,0.5,2.0)：
+
 ![image](https://github.com/neuljh/DDPM-MNIST/assets/132900799/499ed1b5-ff3c-4db1-a551-92c8c744bd15)
 
 19)实验结果(epochs=18;ws_test=0.0,0.5,2.0)：
+
 ![image](https://github.com/neuljh/DDPM-MNIST/assets/132900799/11d896a1-51af-4132-b89b-c5f6b06dac44)
 
 20)实验结果(epochs=19;ws_test=0.0,0.5,2.0)：
+
 ![image](https://github.com/neuljh/DDPM-MNIST/assets/132900799/3bf6b592-cb06-4b42-b017-4979300104a6)
 
 
 (2)与普通GAN的对比
 为了保证对比的准确性，我们调整GAN模型和DDPM模型的参数基本一致：
+```python
 Epochs=20
 Batch_size=256
 Learning_rate=0.0001
+```
 1.epoch=10
+
 普通GAN(epoch=10):
+
 ![image](https://github.com/neuljh/DDPM-MNIST/assets/132900799/db29ca7f-a87e-4863-a5a3-38292b8744ea)
 
 DDPM(epoch=10;ws_test=0.0,0.5,2.0):
+
 ![image](https://github.com/neuljh/DDPM-MNIST/assets/132900799/5ae277c1-9c9f-47d5-8adc-6c91694f249c)
 
 
 2.epoch=20
+
 普通GAN(epoch=20):
+
 ![image](https://github.com/neuljh/DDPM-MNIST/assets/132900799/b3c82f17-b413-4034-b42a-c96b5de2bde4)
 
 DDPM(epoch=20;ws_test=0.0,0.5,2.0):
+
 ![image](https://github.com/neuljh/DDPM-MNIST/assets/132900799/89016338-0ac3-4273-b7c0-16f99de7d792)
 
-
-3.对比总结
-通过对比我们可以很直观的看出，DDPM在性能方面明显优于普通GAN，但是明显的，在训练模型方面，DDPM需要的时间和资源也远远超过于普通GAN。
